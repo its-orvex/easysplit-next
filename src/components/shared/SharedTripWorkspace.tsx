@@ -48,6 +48,7 @@ export default function SharedTripWorkspace() {
   const [pendingDelete, setPendingDelete] = useState<any>(null)
   const [editingMember, setEditingMember] = useState<any>(null)
   const [payTarget, setPayTarget] = useState<any>(null)
+  const [paidNotice, setPaidNotice] = useState('')
 
   useEffect(() => {
     let active = true
@@ -172,7 +173,21 @@ export default function SharedTripWorkspace() {
   function markPaid(transfer: any) {
     if (!trip) return
     const key = `${transfer.from}::${transfer.to}`
-    save({ ...trip, paidTransfers: [...new Set([...(trip.paidTransfers ?? []), key])] })
+    const nextTrip = { ...trip, paidTransfers: [...new Set([...(trip.paidTransfers ?? []), key])] }
+    setTrip(nextTrip)
+    setPaidNotice(`${memberName(transfer.from)} → ${memberName(transfer.to)} marked as paid.`)
+    setTimeout(() => setPaidNotice(''), 3500)
+    save(nextTrip)
+  }
+
+  function undoPaid(transfer: any) {
+    if (!trip) return
+    const key = `${transfer.from}::${transfer.to}`
+    const nextTrip = { ...trip, paidTransfers: (trip.paidTransfers ?? []).filter((item: string) => item !== key) }
+    setTrip(nextTrip)
+    setPaidNotice(`${memberName(transfer.from)} → ${memberName(transfer.to)} moved back to Settle Up.`)
+    setTimeout(() => setPaidNotice(''), 3500)
+    save(nextTrip)
   }
 
   async function copyLink() {
@@ -189,6 +204,7 @@ export default function SharedTripWorkspace() {
   const settlements = trip ? calculateSettlements(trip.members, trip.expenses) : []
   const paidKeys = new Set(trip?.paidTransfers ?? [])
   const activeSettlements = settlements.filter((transfer: any) => !paidKeys.has(`${transfer.from}::${transfer.to}`))
+  const paidSettlements = settlements.filter((transfer: any) => paidKeys.has(`${transfer.from}::${transfer.to}`))
 
   function memberName(id: string) {
     return trip?.members.find((member: any) => member.id === id)?.name ?? id
@@ -243,6 +259,7 @@ export default function SharedTripWorkspace() {
         </section>
 
         {error && <div className="mt-4 rounded-xl bg-red-50 border border-red-200 text-red-700 px-4 py-3 text-sm">{error}</div>}
+        {paidNotice && <div className="mt-4 flex items-center gap-2 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm font-semibold text-green-700"><CheckCircle2 size={17} /> {paidNotice}</div>}
 
         <div className="flex items-center justify-between border-b border-slate-200 mt-7 mb-5"><div className="flex"><button onClick={() => setTab('expenses')} className={`px-4 py-3 text-sm font-bold border-b-2 -mb-px ${tab === 'expenses' ? 'border-teal-600 text-teal-700' : 'border-transparent text-slate-400'}`}>Expenses</button><button onClick={() => setTab('balances')} className={`px-4 py-3 text-sm font-bold border-b-2 -mb-px ${tab === 'balances' ? 'border-teal-600 text-teal-700' : 'border-transparent text-slate-400'}`}>Balances</button></div>{tab === 'expenses' && <button onClick={showExpenseForm ? () => setShowExpenseForm(false) : openExpenseForm} disabled={trip.members.length === 0} className="inline-flex items-center gap-1.5 bg-teal-600 text-white px-3 py-2 rounded-full text-xs font-bold disabled:opacity-40"><Plus size={14} /> Add expense</button>}</div>
 
@@ -259,7 +276,9 @@ export default function SharedTripWorkspace() {
           {trip.expenses.length === 0 ? <div className="text-center py-14 bg-white rounded-2xl border border-slate-100"><div className="text-5xl mb-3">🏔️</div><p className="font-bold text-gray-800">No expenses yet</p><p className="text-sm text-slate-400 mt-1">Add the first trip cost when you have one.</p></div> : <div className="flex flex-col gap-2.5">{[...trip.expenses].sort((a: any, b: any) => b.date.localeCompare(a.date)).map((expense: any) => <ExpenseCard key={expense.id} expense={expense} members={trip.members} onDelete={requestDeleteExpense} />)}</div>}
         </>}
 
-        {tab === 'balances' && <div className="flex flex-col gap-4"><div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden"><p className="px-5 pt-4 pb-3 text-xs font-bold text-slate-400 uppercase tracking-wide">Net balances</p>{trip.members.map((member: any, index: number) => { const balance = balances[member.id] ?? 0; const settled = Math.abs(balance) < 0.005; return <div key={member.id} className={`px-5 py-3 flex items-center gap-3 border-t border-slate-100 ${settled ? '' : balance > 0 ? 'bg-green-50' : 'bg-red-50'}`}><MemberAvatar name={member.name} index={index} size="sm" /><button onClick={() => setEditingMember(member)} className="flex-1 text-left text-sm font-semibold text-gray-800 hover:text-teal-700">{member.name}</button><span className={`text-xs sm:text-sm font-bold ${settled ? 'text-slate-400' : balance > 0 ? 'text-green-600' : 'text-red-500'}`}>{settled ? 'Settled up' : balance > 0 ? `+${formatCurrency(balance)} owed` : `−${formatCurrency(Math.abs(balance))} owes`}</span></div>})}</div><div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden"><div className="px-5 pt-4 pb-3"><p className="text-xs font-bold text-slate-400 uppercase tracking-wide">Settle up</p><p className="text-[11px] text-slate-400 mt-1">Optimised to use the fewest payments for this group.</p></div>{activeSettlements.length === 0 ? <div className="px-5 pb-5 flex items-center gap-2 text-green-600 text-sm font-semibold"><CheckCircle2 size={18} /> All settled up.</div> : activeSettlements.map((transfer: any, index: number) => { const creditor = trip.members.find((member: any) => member.id === transfer.to); const hasPaymentDetails = Boolean(creditor?.payId || (creditor?.bsb && creditor?.accountNumber)); return <div key={index} className="px-4 sm:px-5 py-3.5 border-t border-slate-100 flex flex-wrap items-center gap-2"><span className="text-sm font-semibold text-gray-800 truncate max-w-[90px]">{memberName(transfer.from)}</span><ArrowRight size={14} className="text-slate-400" /><span className="text-sm font-semibold text-gray-800 truncate max-w-[90px]">{memberName(transfer.to)}</span><span className="ml-auto text-sm font-black text-teal-700">{formatCurrency(transfer.amount)}</span>{hasPaymentDetails ? <button onClick={() => openPayment(transfer)} className="inline-flex items-center gap-1 rounded-full bg-teal-600 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-teal-700"><CreditCard size={12} /> Pay now</button> : <button onClick={() => setEditingMember(creditor)} className="text-xs font-semibold text-amber-600 hover:text-amber-700">Add payment details</button>}<button onClick={() => markPaid(transfer)} className="text-xs font-semibold text-slate-500 border border-slate-200 rounded-lg px-2.5 py-1.5 hover:border-teal-400 hover:text-teal-700">Mark paid</button></div>})}</div></div>}
+        {tab === 'balances' && <div className="flex flex-col gap-4"><div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden"><p className="px-5 pt-4 pb-3 text-xs font-bold text-slate-400 uppercase tracking-wide">Net balances</p>{trip.members.map((member: any, index: number) => { const balance = balances[member.id] ?? 0; const settled = Math.abs(balance) < 0.005; return <div key={member.id} className={`px-5 py-3 flex items-center gap-3 border-t border-slate-100 ${settled ? '' : balance > 0 ? 'bg-green-50' : 'bg-red-50'}`}><MemberAvatar name={member.name} index={index} size="sm" /><button onClick={() => setEditingMember(member)} className="flex-1 text-left text-sm font-semibold text-gray-800 hover:text-teal-700">{member.name}</button><span className={`text-xs sm:text-sm font-bold ${settled ? 'text-slate-400' : balance > 0 ? 'text-green-600' : 'text-red-500'}`}>{settled ? 'Settled up' : balance > 0 ? `+${formatCurrency(balance)} owed` : `−${formatCurrency(Math.abs(balance))} owes`}</span></div>})}</div><div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden"><div className="px-5 pt-4 pb-3"><p className="text-xs font-bold text-slate-400 uppercase tracking-wide">Settle up</p><p className="text-[11px] text-slate-400 mt-1">Optimised to use the fewest payments for this group.</p></div>{activeSettlements.length === 0 ? <div className="px-5 pb-5 flex items-center gap-2 text-green-600 text-sm font-semibold"><CheckCircle2 size={18} /> {paidKeys.size > 0 ? 'All payments marked as paid.' : 'All settled up.'}</div> : activeSettlements.map((transfer: any, index: number) => { const creditor = trip.members.find((member: any) => member.id === transfer.to); const hasPaymentDetails = Boolean(creditor?.payId || (creditor?.bsb && creditor?.accountNumber)); return <div key={index} className="px-4 sm:px-5 py-3.5 border-t border-slate-100 flex flex-wrap items-center gap-2"><span className="text-sm font-semibold text-gray-800 truncate max-w-[90px]">{memberName(transfer.from)}</span><ArrowRight size={14} className="text-slate-400" /><span className="text-sm font-semibold text-gray-800 truncate max-w-[90px]">{memberName(transfer.to)}</span><span className="ml-auto text-sm font-black text-teal-700">{formatCurrency(transfer.amount)}</span>{hasPaymentDetails && <button onClick={() => openPayment(transfer)} className="inline-flex items-center gap-1 rounded-full bg-teal-600 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-teal-700"><CreditCard size={12} /> Pay now</button>}<button onClick={() => markPaid(transfer)} className="text-xs font-semibold text-slate-500 border border-slate-200 rounded-lg px-2.5 py-1.5 hover:border-teal-400 hover:text-teal-700">Mark paid</button></div>})}</div></div>}
+
+        {tab === 'balances' && paidSettlements.length > 0 && <div className="mt-4 overflow-hidden rounded-2xl border border-green-200 bg-white shadow-sm"><div className="flex items-center gap-2 px-5 py-3 text-xs font-bold uppercase tracking-wide text-green-700"><CheckCircle2 size={15} /> Paid</div>{paidSettlements.map((transfer: any, index: number) => <div key={index} className="flex flex-wrap items-center gap-2 border-t border-green-100 bg-green-50/60 px-4 sm:px-5 py-3"><span className="text-sm font-semibold text-slate-500 line-through">{memberName(transfer.from)}</span><ArrowRight size={13} className="text-slate-300" /><span className="text-sm font-semibold text-slate-500 line-through">{memberName(transfer.to)}</span><span className="ml-auto text-sm font-bold text-green-700">{formatCurrency(transfer.amount)}</span><button onClick={() => undoPaid(transfer)} className="rounded-lg border border-green-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-green-700 hover:bg-green-50">Undo</button></div>)}</div>}
 
         {pendingDelete && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">

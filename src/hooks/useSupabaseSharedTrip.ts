@@ -2,6 +2,14 @@ import { supabase } from '@/lib/supabase'
 
 const TABLE = 'shared_trips'
 
+function normaliseTrip(row: any) {
+  if (!row) return null
+  return {
+    ...row,
+    paidTransfers: row.paid_transfers ?? row.paidTransfers ?? [],
+  }
+}
+
 export function subscribeToSharedTrip(
   slug: string,
   callback: (trip: any | null) => void,
@@ -18,7 +26,7 @@ export function subscribeToSharedTrip(
     }, payload => {
       if (!active) return
       if (payload.eventType === 'DELETE') callback(null)
-      else callback(payload.new)
+      else callback(normaliseTrip(payload.new))
     })
     .subscribe(status => {
       if (status === 'CHANNEL_ERROR' && active) onError?.(new Error('Realtime connection failed'))
@@ -28,7 +36,7 @@ export function subscribeToSharedTrip(
     .then(({ data, error }) => {
       if (!active) return
       if (error) onError?.(error)
-      else if (data) callback(data)
+      else if (data) callback(normaliseTrip(data))
     })
 
   return () => {
@@ -42,7 +50,7 @@ export async function ensureSharedTrip(slug: string, initialTrip: any) {
 
   const existing = await supabase.from(TABLE).select('*').eq('slug', slug).maybeSingle()
   if (existing.error) throw existing.error
-  if (existing.data) return existing.data
+  if (existing.data) return normaliseTrip(existing.data)
 
   const inserted = await supabase.from(TABLE).insert({
     slug,
@@ -53,12 +61,12 @@ export async function ensureSharedTrip(slug: string, initialTrip: any) {
     visibility: initialTrip.visibility,
   }).select('*').single()
 
-  if (!inserted.error) return inserted.data
+  if (!inserted.error) return normaliseTrip(inserted.data)
 
   // Another guest may have created the row at the same time. Read it back.
   const raced = await supabase.from(TABLE).select('*').eq('slug', slug).single()
   if (raced.error) throw inserted.error
-  return raced.data
+  return normaliseTrip(raced.data)
 }
 
 export async function updateSharedTrip(slug: string, trip: any) {
