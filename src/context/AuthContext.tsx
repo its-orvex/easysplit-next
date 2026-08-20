@@ -5,6 +5,7 @@ import {
   GoogleAuthProvider,
   OAuthProvider,
   signInWithPopup,
+  signInAnonymously as fbSignInAnonymously,
   signOut as fbSignOut,
   onAuthStateChanged,
 } from 'firebase/auth'
@@ -15,6 +16,7 @@ interface AuthContextValue {
   authLoading: boolean
   signInWithGoogle: () => Promise<any>
   signInWithApple: () => Promise<any>
+  signInAnonymously: () => Promise<any>
   signOut: () => Promise<void>
   showAuthModal: boolean
   setShowAuthModal: (v: boolean) => void
@@ -53,6 +55,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return result
   }
 
+  async function signInWithAnonymously() {
+    if (!auth) throw new Error('Firebase is not configured')
+    return fbSignInAnonymously(auth)
+  }
+
   async function signOut() {
     if (!auth) return
     await fbSignOut(auth)
@@ -62,7 +69,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   return (
     <AuthContext.Provider value={{
       user, authLoading,
-      signInWithGoogle, signInWithApple, signOut,
+      signInWithGoogle, signInWithApple, signInAnonymously: signInWithAnonymously, signOut,
       showAuthModal, setShowAuthModal,
     }}>
       {children}
