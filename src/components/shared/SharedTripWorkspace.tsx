@@ -5,11 +5,10 @@ import {
   ArrowRight, Check, CheckCircle2, Copy, Loader2, Plus, Receipt,
   Share2, Trash2, UserPlus, Users, X,
 } from 'lucide-react'
-import { useAuth } from '@/context/AuthContext'
-import { IS_CONFIGURED } from '@/lib/firebase'
+import { IS_SUPABASE_CONFIGURED } from '@/lib/supabase'
 import {
   ensureSharedTrip, subscribeToSharedTrip, updateSharedTrip,
-} from '@/hooks/useFirestore'
+} from '@/hooks/useSupabaseSharedTrip'
 import { createExpense, createMember, CATEGORIES } from '@/utils/models'
 import { calculateNetBalances, calculateSettlements } from '@/utils/settlement'
 import { formatCurrency } from '@/utils/format'
@@ -30,7 +29,6 @@ function today() {
 }
 
 export default function SharedTripWorkspace() {
-  const { user, authLoading, signInAnonymously } = useAuth()
   const [trip, setTrip] = useState<any>(null)
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
   const [error, setError] = useState('')
@@ -46,17 +44,6 @@ export default function SharedTripWorkspace() {
   const [paidById, setPaidById] = useState('')
 
   useEffect(() => {
-    if (!authLoading && !user && IS_CONFIGURED) {
-      signInAnonymously().catch(err => {
-        setError(err.message ?? 'Could not open the shared trip.')
-        setStatus('error')
-      })
-    }
-  }, [authLoading, user, signInAnonymously])
-
-  useEffect(() => {
-    if (!user) return
-
     let active = true
     ensureSharedTrip(SLUG, initialTrip).catch(err => {
       if (!active) return
@@ -79,7 +66,7 @@ export default function SharedTripWorkspace() {
     )
 
     return () => { active = false; unsubscribe() }
-  }, [user])
+  }, [])
 
   async function save(nextTrip: any) {
     setSaving(true)
@@ -164,12 +151,12 @@ export default function SharedTripWorkspace() {
     return trip?.members.find((member: any) => member.id === id)?.name ?? id
   }
 
-  if (!IS_CONFIGURED) {
-    return <Message title="Firebase needs to be connected" body="This shared trip needs the production Firebase connection before it can save updates for everyone." />
+  if (!IS_SUPABASE_CONFIGURED) {
+    return <Message title="Supabase needs to be connected" body="Add the Supabase project URL and anon key to the Vercel environment variables, then redeploy this site." />
   }
 
   if (status === 'error') {
-    return <Message title="Could not open SNOW 2026" body={error || 'Check that Firebase Anonymous Authentication is enabled, then try again.'} />
+    return <Message title="Could not open SNOW 2026" body={error || 'Check the Supabase table and policies, then try again.'} />
   }
 
   if (status !== 'ready' || !trip) {
