@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import {
-  ArrowRight, Check, CheckCircle2, Copy, Loader2, Plus, Receipt,
-  Share2, Trash2, UserPlus, Users, X,
+  ArrowRight, Check, CheckCircle2, CreditCard, Loader2, Plus, Receipt,
+  Share2, UserPlus, Users, X,
 } from 'lucide-react'
 import { IS_SUPABASE_CONFIGURED } from '@/lib/supabase'
 import {
@@ -14,6 +14,8 @@ import { calculateNetBalances, calculateSettlements } from '@/utils/settlement'
 import { formatCurrency } from '@/utils/format'
 import MemberAvatar from '@/components/MemberAvatar'
 import ExpenseCard from '@/components/expenses/ExpenseCard'
+import MemberDetailSheet from '@/components/members/MemberDetailSheet'
+import PaymentSheet from '@/components/members/PaymentSheet'
 
 const SLUG = 'snow-2026'
 const initialTrip = {
@@ -43,6 +45,9 @@ export default function SharedTripWorkspace() {
   const [category, setCategory] = useState('other')
   const [paidById, setPaidById] = useState('')
   const [participants, setParticipants] = useState<string[]>([])
+  const [pendingDelete, setPendingDelete] = useState<any>(null)
+  const [editingMember, setEditingMember] = useState<any>(null)
+  const [payTarget, setPayTarget] = useState<any>(null)
 
   useEffect(() => {
     let active = true
@@ -124,7 +129,7 @@ export default function SharedTripWorkspace() {
 
   function openExpenseForm() {
     if (!trip) return
-    setParticipants(trip.members.map((member: any) => member.id))
+    setParticipants([])
     setShowExpenseForm(true)
     setError('')
   }
@@ -138,6 +143,30 @@ export default function SharedTripWorkspace() {
   function deleteExpense(id: string) {
     if (!trip) return
     save({ ...trip, expenses: trip.expenses.filter((expense: any) => expense.id !== id) })
+  }
+
+  function requestDeleteExpense(id: string) {
+    setPendingDelete(trip?.expenses.find((expense: any) => expense.id === id) ?? null)
+  }
+
+  function confirmDeleteExpense() {
+    if (!pendingDelete) return
+    deleteExpense(pendingDelete.id)
+    setPendingDelete(null)
+  }
+
+  function saveMember(updatedMember: any) {
+    if (!trip) return
+    save({ ...trip, members: trip.members.map((member: any) => member.id === updatedMember.id ? updatedMember : member) })
+    setEditingMember(null)
+  }
+
+  function openPayment(transfer: any) {
+    setPayTarget({
+      settlement: transfer,
+      debtor: trip.members.find((member: any) => member.id === transfer.from),
+      creditor: trip.members.find((member: any) => member.id === transfer.to),
+    })
   }
 
   function markPaid(transfer: any) {
@@ -208,8 +237,8 @@ export default function SharedTripWorkspace() {
         </section>
 
         <section className="mt-5 bg-white rounded-2xl border border-slate-100 shadow-sm p-4 sm:p-5">
-          <div className="flex items-center justify-between gap-3 mb-3"><p className="text-xs font-bold text-slate-400 uppercase tracking-wide">Going on the trip</p><button onClick={() => setShowMemberForm(v => !v)} className="inline-flex items-center gap-1.5 text-sm font-semibold text-teal-700"><UserPlus size={15} /> Add me</button></div>
-          {trip.members.length === 0 ? <p className="text-sm text-slate-400">Add everyone’s name so expenses can be assigned correctly.</p> : <div className="flex flex-wrap gap-2">{trip.members.map((member: any, index: number) => <div key={member.id} className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-full pl-1 pr-3 py-1"><MemberAvatar name={member.name} index={index} size="xs" /><span className="text-sm font-medium text-slate-700">{member.name}</span></div>)}</div>}
+          <div className="flex items-center justify-between gap-3 mb-3"><div><p className="text-xs font-bold text-slate-400 uppercase tracking-wide">Going on the trip</p><p className="text-[11px] text-slate-400 mt-0.5">Tap a person to add PayID or bank details</p></div><button onClick={() => setShowMemberForm(v => !v)} className="inline-flex items-center gap-1.5 text-sm font-semibold text-teal-700"><UserPlus size={15} /> Add me</button></div>
+          {trip.members.length === 0 ? <p className="text-sm text-slate-400">Add everyone’s name so expenses can be assigned correctly.</p> : <div className="flex flex-wrap gap-2">{trip.members.map((member: any, index: number) => <button key={member.id} onClick={() => setEditingMember(member)} className="flex items-center gap-1.5 bg-slate-50 hover:bg-teal-50 border border-slate-200 hover:border-teal-300 rounded-full pl-1 pr-3 py-1 transition-colors"><MemberAvatar name={member.name} index={index} size="xs" /><span className="text-sm font-medium text-slate-700">{member.name}</span>{(member.payId || (member.bsb && member.accountNumber)) && <span className="text-[10px] text-teal-500">●</span>}</button>)}</div>}
           {showMemberForm && <form onSubmit={addMember} className="flex gap-2 mt-4"><input value={memberNameInput} onChange={event => setMemberNameInput(event.target.value)} placeholder="Your name" autoFocus className="flex-1 min-w-0 border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" /><button className="bg-teal-600 text-white rounded-xl px-4 text-sm font-semibold">Add</button><button type="button" onClick={() => setShowMemberForm(false)} className="p-2 text-slate-400"><X size={18} /></button></form>}
         </section>
 
@@ -227,10 +256,23 @@ export default function SharedTripWorkspace() {
               <button className="mt-4 w-full bg-teal-600 hover:bg-teal-700 text-white rounded-xl py-3 text-sm font-bold">Save expense</button>
             </form>
           )}
-          {trip.expenses.length === 0 ? <div className="text-center py-14 bg-white rounded-2xl border border-slate-100"><div className="text-5xl mb-3">🏔️</div><p className="font-bold text-gray-800">No expenses yet</p><p className="text-sm text-slate-400 mt-1">Add the first trip cost when you have one.</p></div> : <div className="flex flex-col gap-2.5">{[...trip.expenses].sort((a: any, b: any) => b.date.localeCompare(a.date)).map((expense: any) => <ExpenseCard key={expense.id} expense={expense} members={trip.members} onDelete={deleteExpense} />)}</div>}
+          {trip.expenses.length === 0 ? <div className="text-center py-14 bg-white rounded-2xl border border-slate-100"><div className="text-5xl mb-3">🏔️</div><p className="font-bold text-gray-800">No expenses yet</p><p className="text-sm text-slate-400 mt-1">Add the first trip cost when you have one.</p></div> : <div className="flex flex-col gap-2.5">{[...trip.expenses].sort((a: any, b: any) => b.date.localeCompare(a.date)).map((expense: any) => <ExpenseCard key={expense.id} expense={expense} members={trip.members} onDelete={requestDeleteExpense} />)}</div>}
         </>}
 
-        {tab === 'balances' && <div className="flex flex-col gap-4"><div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden"><p className="px-5 pt-4 pb-3 text-xs font-bold text-slate-400 uppercase tracking-wide">Net balances</p>{trip.members.map((member: any, index: number) => { const balance = balances[member.id] ?? 0; const settled = Math.abs(balance) < 0.005; return <div key={member.id} className={`px-5 py-3 flex items-center gap-3 border-t border-slate-100 ${settled ? '' : balance > 0 ? 'bg-green-50' : 'bg-red-50'}`}><MemberAvatar name={member.name} index={index} size="sm" /><span className="flex-1 text-sm font-semibold text-gray-800">{member.name}</span><span className={`text-xs sm:text-sm font-bold ${settled ? 'text-slate-400' : balance > 0 ? 'text-green-600' : 'text-red-500'}`}>{settled ? 'Settled up' : balance > 0 ? `+${formatCurrency(balance)} owed` : `−${formatCurrency(Math.abs(balance))} owes`}</span></div>})}</div><div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden"><p className="px-5 pt-4 pb-3 text-xs font-bold text-slate-400 uppercase tracking-wide">Settle up</p>{activeSettlements.length === 0 ? <div className="px-5 pb-5 flex items-center gap-2 text-green-600 text-sm font-semibold"><CheckCircle2 size={18} /> All settled up.</div> : activeSettlements.map((transfer: any, index: number) => <div key={index} className="px-4 sm:px-5 py-3.5 border-t border-slate-100 flex flex-wrap items-center gap-2"><span className="text-sm font-semibold text-gray-800 truncate max-w-[90px]">{memberName(transfer.from)}</span><ArrowRight size={14} className="text-slate-400" /><span className="text-sm font-semibold text-gray-800 truncate max-w-[90px]">{memberName(transfer.to)}</span><span className="ml-auto text-sm font-black text-teal-700">{formatCurrency(transfer.amount)}</span><button onClick={() => markPaid(transfer)} className="text-xs font-semibold text-slate-500 border border-slate-200 rounded-lg px-2.5 py-1.5 hover:border-teal-400 hover:text-teal-700">Mark paid</button></div>)}</div></div>}
+        {tab === 'balances' && <div className="flex flex-col gap-4"><div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden"><p className="px-5 pt-4 pb-3 text-xs font-bold text-slate-400 uppercase tracking-wide">Net balances</p>{trip.members.map((member: any, index: number) => { const balance = balances[member.id] ?? 0; const settled = Math.abs(balance) < 0.005; return <div key={member.id} className={`px-5 py-3 flex items-center gap-3 border-t border-slate-100 ${settled ? '' : balance > 0 ? 'bg-green-50' : 'bg-red-50'}`}><MemberAvatar name={member.name} index={index} size="sm" /><button onClick={() => setEditingMember(member)} className="flex-1 text-left text-sm font-semibold text-gray-800 hover:text-teal-700">{member.name}</button><span className={`text-xs sm:text-sm font-bold ${settled ? 'text-slate-400' : balance > 0 ? 'text-green-600' : 'text-red-500'}`}>{settled ? 'Settled up' : balance > 0 ? `+${formatCurrency(balance)} owed` : `−${formatCurrency(Math.abs(balance))} owes`}</span></div>})}</div><div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden"><div className="px-5 pt-4 pb-3"><p className="text-xs font-bold text-slate-400 uppercase tracking-wide">Settle up</p><p className="text-[11px] text-slate-400 mt-1">Optimised to use the fewest payments for this group.</p></div>{activeSettlements.length === 0 ? <div className="px-5 pb-5 flex items-center gap-2 text-green-600 text-sm font-semibold"><CheckCircle2 size={18} /> All settled up.</div> : activeSettlements.map((transfer: any, index: number) => { const creditor = trip.members.find((member: any) => member.id === transfer.to); const hasPaymentDetails = Boolean(creditor?.payId || (creditor?.bsb && creditor?.accountNumber)); return <div key={index} className="px-4 sm:px-5 py-3.5 border-t border-slate-100 flex flex-wrap items-center gap-2"><span className="text-sm font-semibold text-gray-800 truncate max-w-[90px]">{memberName(transfer.from)}</span><ArrowRight size={14} className="text-slate-400" /><span className="text-sm font-semibold text-gray-800 truncate max-w-[90px]">{memberName(transfer.to)}</span><span className="ml-auto text-sm font-black text-teal-700">{formatCurrency(transfer.amount)}</span>{hasPaymentDetails ? <button onClick={() => openPayment(transfer)} className="inline-flex items-center gap-1 rounded-full bg-teal-600 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-teal-700"><CreditCard size={12} /> Pay now</button> : <button onClick={() => setEditingMember(creditor)} className="text-xs font-semibold text-amber-600 hover:text-amber-700">Add payment details</button>}<button onClick={() => markPaid(transfer)} className="text-xs font-semibold text-slate-500 border border-slate-200 rounded-lg px-2.5 py-1.5 hover:border-teal-400 hover:text-teal-700">Mark paid</button></div>})}</div></div>}
+
+        {pendingDelete && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+            <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl">
+              <h2 className="text-lg font-bold text-gray-900">Delete “{pendingDelete.description}”?</h2>
+              <p className="mt-2 text-sm text-slate-500">This removes {formatCurrency(pendingDelete.amount)} from the trip and recalculates everyone’s balances. This can’t be undone.</p>
+              <div className="mt-5 flex gap-3"><button onClick={() => setPendingDelete(null)} className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-semibold text-slate-600">Cancel</button><button onClick={confirmDeleteExpense} className="flex-1 rounded-xl bg-red-600 py-2.5 text-sm font-semibold text-white hover:bg-red-700">Delete expense</button></div>
+            </div>
+          </div>
+        )}
+
+        {editingMember && <MemberDetailSheet member={editingMember} trip={trip} onSave={saveMember} onClose={() => setEditingMember(null)} />}
+        {payTarget && <PaymentSheet settlement={payTarget.settlement} debtor={payTarget.debtor} creditor={payTarget.creditor} tripName={trip.name} onMarkPaid={markPaid} onClose={() => setPayTarget(null)} />}
       </div>
     </main>
   )

@@ -19,6 +19,8 @@ import { generateInviteCode, generateShareToken } from './inviteCode'
  *   name: string
  *   email: string?
  *   payId: string?         — phone number or email for PayID
+ *   bsb: string?           — Australian bank BSB
+ *   accountNumber: string? — Australian bank account number
  *   preferredBank: string? — e.g. "commbank", "anz"
  *   isGuest: boolean       — true if manually added (not a real account)
  *   tags: string[]         — e.g. ["driver", "child", "non-drinker", "business"]
@@ -62,6 +64,8 @@ export function createMember(name, overrides = {}) {
     name: name.trim(),
     email: overrides.email ?? null,
     payId: overrides.payId ?? null,
+    bsb: overrides.bsb ?? null,
+    accountNumber: overrides.accountNumber ?? null,
     preferredBank: overrides.preferredBank ?? null,
     isGuest: overrides.isGuest ?? true,
     tags: overrides.tags ?? [],

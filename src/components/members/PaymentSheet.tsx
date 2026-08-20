@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { X, Check, AlertCircle } from 'lucide-react'
+import { X, Check, AlertCircle, Copy } from 'lucide-react'
 import { BANKS } from '@/utils/models'
 import { formatCurrency } from '@/utils/format'
 
@@ -38,13 +38,29 @@ interface Props {
 export default function PaymentSheet({ settlement, debtor, creditor, tripName, onMarkPaid, onClose }: Props) {
   const [phase,   setPhase]   = useState<'choose' | 'opening'>('choose')
   const [deepErr, setDeepErr] = useState(false)
+  const [copied,  setCopied]  = useState(false)
 
   const amount      = formatCurrency(settlement.amount)
   const recipientId = creditor?.payId
+  const hasBankDetails = Boolean(creditor?.bsb && creditor?.accountNumber)
+  const paymentDetails = [
+    `${amount} to ${creditor?.name ?? 'recipient'}`,
+    recipientId ? `PayID: ${recipientId}` : null,
+    hasBankDetails ? `BSB: ${creditor.bsb}` : null,
+    hasBankDetails ? `Account: ${creditor.accountNumber}` : null,
+    `Reference: ${tripName}`,
+  ].filter(Boolean).join('\n')
+
+  async function copyPaymentDetails() {
+    try {
+      await navigator.clipboard.writeText(paymentDetails)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1800)
+    } catch { /* ignore */ }
+  }
 
   async function handleBankClick(bank: any) {
-    const text = `${recipientId ?? creditor?.name} — ${amount} — ${tripName}`
-    try { await navigator.clipboard.writeText(text) } catch { /* ignore */ }
+    await copyPaymentDetails()
 
     if (bank.deepLink) {
       setPhase('opening')
@@ -75,10 +91,15 @@ export default function PaymentSheet({ settlement, debtor, creditor, tripName, o
           <div className="bg-teal-50 border border-teal-100 rounded-2xl p-4 mb-5 text-center">
             <p className="text-sm text-teal-600 font-medium mb-0.5">Amount to send</p>
             <p className="text-3xl font-black text-teal-700 mb-1">{amount}</p>
-            {recipientId
-              ? <p className="text-sm text-teal-600">to <span className="font-semibold">{recipientId}</span></p>
-              : <p className="text-sm text-amber-600">⚠️ {creditor?.name} has no PayID set — contact them directly</p>
-            }
+            <p className="text-sm font-semibold text-teal-700">to {creditor?.name}</p>
+            {recipientId && <p className="text-sm text-teal-600 mt-1">PayID: <span className="font-semibold">{recipientId}</span></p>}
+            {hasBankDetails && <p className="text-sm text-teal-600 mt-1">BSB: <span className="font-semibold">{creditor.bsb}</span> · Account: <span className="font-semibold">{creditor.accountNumber}</span></p>}
+            {!recipientId && !hasBankDetails && <p className="text-sm text-amber-600 mt-1">⚠️ No payment details set — tap their name to add PayID or bank details</p>}
+            {(recipientId || hasBankDetails) && (
+              <button onClick={copyPaymentDetails} className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-teal-200 bg-white px-3 py-1.5 text-xs font-semibold text-teal-700">
+                {copied ? <Check size={13} /> : <Copy size={13} />}{copied ? 'Copied' : 'Copy payment details'}
+              </button>
+            )}
           </div>
 
           {phase === 'choose' && (

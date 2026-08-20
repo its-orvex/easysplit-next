@@ -1,15 +1,15 @@
 /**
  * Calculates the minimum number of transfers to settle all debts.
  *
- * ALGORITHM — Greedy net-balance reduction (optimal for minimising transfer count):
+ * ALGORITHM — exact net-balance settlement for normal trip-sized groups:
  *   1. Compute each member's net balance: total_paid − total_owed.
  *      Positive = others owe them; negative = they owe others.
- *   2. Separate into creditors (balance > 0) and debtors (balance < 0).
- *   3. Sort both lists by absolute value descending (largest first).
- *   4. Greedily match the largest debtor with the largest creditor:
- *        amount = min(|debtor|, creditor)
- *        Record transfer; reduce both balances; drop anyone who reaches 0.
- *   5. Repeat until no debtors or creditors remain.
+ *   2. Convert balances to cents and remove any rounding-cent residual.
+ *   3. Explore valid debtor/creditor matches with memoised backtracking.
+ *   4. Return the solution with the fewest transfers.
+ *
+ * Groups above 12 unsettled members use a fast greedy fallback to avoid
+ * exponential work. Typical trips, including SNOW 2026, use the exact solver.
  *
  * Handles splitMode: 'equal', 'custom', 'byItem'
  */
@@ -77,39 +77,93 @@ export function calculateSettlements(members, expenses) {
     applyExpenseToNet(net, expense)
   }
 
-  const creditors = []
-  const debtors = []
+  const entries = Object.entries(net)
+    .map(([id, balance]) => ({ id, cents: Math.round(balance * 100) }))
+    .filter(entry => entry.cents !== 0)
 
-  for (const [id, balance] of Object.entries(net)) {
-    const rounded = +balance.toFixed(2)
-    if (rounded > 0) creditors.push({ id, balance: rounded })
-    else if (rounded < 0) debtors.push({ id, balance: rounded })
+  // Equal splits can produce a one-cent rounding residual. Assign it to the
+  // largest balance so the transfer graph always sums to exactly zero.
+  const residual = entries.reduce((sum, entry) => sum + entry.cents, 0)
+  if (residual !== 0 && entries.length > 0) {
+    const largest = entries.reduce((best, entry) =>
+      Math.abs(entry.cents) > Math.abs(best.cents) ? entry : best)
+    largest.cents -= residual
   }
 
-  creditors.sort((a, b) => b.balance - a.balance)
-  debtors.sort((a, b) => a.balance - b.balance)
+  const unsettled = entries.filter(entry => entry.cents !== 0)
+  const centsTransfers = unsettled.length <= 12
+    ? findMinimumTransfers(unsettled)
+    : findGreedyTransfers(unsettled)
 
-  const settlements = []
-  let ci = 0
-  let di = 0
+  return centsTransfers.map(transfer => ({ ...transfer, amount: transfer.cents / 100 }))
+}
 
-  while (ci < creditors.length && di < debtors.length) {
-    const creditor = creditors[ci]
-    const debtor = debtors[di]
+function findMinimumTransfers(entries) {
+  const initial = entries.map(entry => entry.cents)
+  const memo = new Map()
 
-    const amount = +Math.min(creditor.balance, Math.abs(debtor.balance)).toFixed(2)
-    if (amount > 0.005) {
-      settlements.push({ from: debtor.id, to: creditor.id, amount })
+  function solve(balances) {
+    const first = balances.findIndex(value => value !== 0)
+    if (first === -1) return []
+
+    const key = balances.join(',')
+    if (memo.has(key)) return memo.get(key)
+
+    let best = null
+    const triedBalances = new Set()
+
+    for (let other = first + 1; other < balances.length; other++) {
+      if (balances[first] * balances[other] >= 0 || triedBalances.has(balances[other])) continue
+      triedBalances.add(balances[other])
+
+      const cents = Math.min(Math.abs(balances[first]), Math.abs(balances[other]))
+      const next = [...balances]
+      let transfer
+
+      if (balances[first] < 0) {
+        next[first] += cents
+        next[other] -= cents
+        transfer = { from: entries[first].id, to: entries[other].id, cents }
+      } else {
+        next[first] -= cents
+        next[other] += cents
+        transfer = { from: entries[other].id, to: entries[first].id, cents }
+      }
+
+      const rest = solve(next)
+      if (rest && (!best || rest.length + 1 < best.length)) best = [transfer, ...rest]
+
+      // An exact cancellation is always the strongest match for this state.
+      if (Math.abs(balances[first]) === Math.abs(balances[other])) break
     }
 
-    creditor.balance = +(creditor.balance - amount).toFixed(2)
-    debtor.balance = +(debtor.balance + amount).toFixed(2)
-
-    if (creditor.balance < 0.005) ci++
-    if (Math.abs(debtor.balance) < 0.005) di++
+    memo.set(key, best)
+    return best
   }
 
-  return settlements
+  return solve(initial) ?? []
+}
+
+function findGreedyTransfers(entries) {
+  const creditors = entries.filter(entry => entry.cents > 0).map(entry => ({ ...entry }))
+  const debtors = entries.filter(entry => entry.cents < 0).map(entry => ({ ...entry }))
+  creditors.sort((a, b) => b.cents - a.cents)
+  debtors.sort((a, b) => a.cents - b.cents)
+
+  const transfers = []
+  let creditorIndex = 0
+  let debtorIndex = 0
+  while (creditorIndex < creditors.length && debtorIndex < debtors.length) {
+    const creditor = creditors[creditorIndex]
+    const debtor = debtors[debtorIndex]
+    const cents = Math.min(creditor.cents, Math.abs(debtor.cents))
+    transfers.push({ from: debtor.id, to: creditor.id, cents })
+    creditor.cents -= cents
+    debtor.cents += cents
+    if (creditor.cents === 0) creditorIndex++
+    if (debtor.cents === 0) debtorIndex++
+  }
+  return transfers
 }
 
 /**

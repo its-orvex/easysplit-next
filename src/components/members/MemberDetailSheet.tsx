@@ -12,6 +12,8 @@ const TABS = ['Profile', 'Expenses', 'Settlements']
 function ProfileTab({ member, onSave, onClose }: any) {
   const [name,          setName]          = useState(member.name)
   const [payId,         setPayId]         = useState(member.payId ?? '')
+  const [bsb,           setBsb]           = useState(member.bsb ?? '')
+  const [accountNumber, setAccountNumber] = useState(member.accountNumber ?? '')
   const [preferredBank, setPreferredBank] = useState(member.preferredBank ?? '')
   const [tags,          setTags]          = useState(member.tags ?? [])
 
@@ -21,7 +23,15 @@ function ProfileTab({ member, onSave, onClose }: any) {
 
   function handleSave() {
     if (!name.trim()) return
-    onSave({ ...member, name: name.trim(), payId: payId.trim() || null, preferredBank: preferredBank || null, tags })
+    onSave({
+      ...member,
+      name: name.trim(),
+      payId: payId.trim() || null,
+      bsb: bsb.trim() || null,
+      accountNumber: accountNumber.trim() || null,
+      preferredBank: preferredBank || null,
+      tags,
+    })
   }
 
   const inputCls = "w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
@@ -37,6 +47,16 @@ function ProfileTab({ member, onSave, onClose }: any) {
         <p className="text-xs text-slate-400 mb-1.5">Phone number or email address</p>
         <input type="text" value={payId} onChange={e => setPayId(e.target.value)}
           placeholder="e.g. 0412 345 678 or name@email.com" className={inputCls} />
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Bank transfer details</label>
+        <p className="text-xs text-slate-400 mb-1.5">Optional alternative to PayID</p>
+        <div className="grid grid-cols-[110px_1fr] gap-2">
+          <input type="text" inputMode="numeric" value={bsb} onChange={e => setBsb(e.target.value)}
+            placeholder="BSB" className={inputCls} />
+          <input type="text" inputMode="numeric" value={accountNumber} onChange={e => setAccountNumber(e.target.value)}
+            placeholder="Account number" className={inputCls} />
+        </div>
       </div>
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">Preferred payment app</label>
