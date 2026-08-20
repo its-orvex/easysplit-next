@@ -42,6 +42,7 @@ export default function SharedTripWorkspace() {
   const [amount, setAmount] = useState('')
   const [category, setCategory] = useState('other')
   const [paidById, setPaidById] = useState('')
+  const [participants, setParticipants] = useState<string[]>([])
 
   useEffect(() => {
     let active = true
@@ -98,8 +99,8 @@ export default function SharedTripWorkspace() {
   function addExpense(event: React.FormEvent) {
     event.preventDefault()
     const numericAmount = Number(amount)
-    if (!trip || !description.trim() || !Number.isFinite(numericAmount) || numericAmount <= 0 || !paidById) {
-      setError('Add a description, amount, and payer first.')
+    if (!trip || !description.trim() || !Number.isFinite(numericAmount) || numericAmount <= 0 || !paidById || participants.length === 0) {
+      setError('Add a description, amount, payer, and at least one person to split it with.')
       return
     }
     const expense = createExpense({
@@ -108,7 +109,7 @@ export default function SharedTripWorkspace() {
       amount: numericAmount,
       paidById,
       splitMode: 'equal',
-      participants: trip.members.map((member: any) => member.id),
+      participants,
       customSplits: null,
       items: null,
       receiptImage: null,
@@ -119,6 +120,19 @@ export default function SharedTripWorkspace() {
     setAmount('')
     setShowExpenseForm(false)
     setError('')
+  }
+
+  function openExpenseForm() {
+    if (!trip) return
+    setParticipants(trip.members.map((member: any) => member.id))
+    setShowExpenseForm(true)
+    setError('')
+  }
+
+  function toggleParticipant(memberId: string) {
+    setParticipants(current => current.includes(memberId)
+      ? current.filter(id => id !== memberId)
+      : [...current, memberId])
   }
 
   function deleteExpense(id: string) {
@@ -201,10 +215,18 @@ export default function SharedTripWorkspace() {
 
         {error && <div className="mt-4 rounded-xl bg-red-50 border border-red-200 text-red-700 px-4 py-3 text-sm">{error}</div>}
 
-        <div className="flex items-center justify-between border-b border-slate-200 mt-7 mb-5"><div className="flex"><button onClick={() => setTab('expenses')} className={`px-4 py-3 text-sm font-bold border-b-2 -mb-px ${tab === 'expenses' ? 'border-teal-600 text-teal-700' : 'border-transparent text-slate-400'}`}>Expenses</button><button onClick={() => setTab('balances')} className={`px-4 py-3 text-sm font-bold border-b-2 -mb-px ${tab === 'balances' ? 'border-teal-600 text-teal-700' : 'border-transparent text-slate-400'}`}>Balances</button></div>{tab === 'expenses' && <button onClick={() => setShowExpenseForm(v => !v)} disabled={trip.members.length === 0} className="inline-flex items-center gap-1.5 bg-teal-600 text-white px-3 py-2 rounded-full text-xs font-bold disabled:opacity-40"><Plus size={14} /> Add expense</button>}</div>
+        <div className="flex items-center justify-between border-b border-slate-200 mt-7 mb-5"><div className="flex"><button onClick={() => setTab('expenses')} className={`px-4 py-3 text-sm font-bold border-b-2 -mb-px ${tab === 'expenses' ? 'border-teal-600 text-teal-700' : 'border-transparent text-slate-400'}`}>Expenses</button><button onClick={() => setTab('balances')} className={`px-4 py-3 text-sm font-bold border-b-2 -mb-px ${tab === 'balances' ? 'border-teal-600 text-teal-700' : 'border-transparent text-slate-400'}`}>Balances</button></div>{tab === 'expenses' && <button onClick={showExpenseForm ? () => setShowExpenseForm(false) : openExpenseForm} disabled={trip.members.length === 0} className="inline-flex items-center gap-1.5 bg-teal-600 text-white px-3 py-2 rounded-full text-xs font-bold disabled:opacity-40"><Plus size={14} /> Add expense</button>}</div>
 
         {tab === 'expenses' && <>
-          {showExpenseForm && <form onSubmit={addExpense} className="bg-white rounded-2xl border border-teal-200 shadow-sm p-4 sm:p-5 mb-4"><div className="flex items-center justify-between mb-4"><p className="font-bold text-gray-900">New expense</p><button type="button" onClick={() => setShowExpenseForm(false)} className="text-slate-400"><X size={18} /></button></div><div className="grid grid-cols-1 sm:grid-cols-[1fr_130px] gap-3"><input value={description} onChange={event => setDescription(event.target.value)} placeholder="What was it? e.g. lift tickets" autoFocus className="border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" /><input type="number" min="0.01" step="0.01" value={amount} onChange={event => setAmount(event.target.value)} placeholder="Amount" className="border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" /></div><div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3"><select value={category} onChange={event => setCategory(event.target.value)} className="border border-slate-200 rounded-xl px-3 py-2.5 text-sm bg-white">{CATEGORIES.map((item: string) => <option key={item} value={item}>{item.charAt(0).toUpperCase() + item.slice(1)}</option>)}</select><select value={paidById} onChange={event => setPaidById(event.target.value)} className="border border-slate-200 rounded-xl px-3 py-2.5 text-sm bg-white"><option value="">Paid by…</option>{trip.members.map((member: any) => <option key={member.id} value={member.id}>{member.name}</option>)}</select></div><p className="text-xs text-slate-400 mt-3">This first shared version splits each expense equally between everyone on the trip.</p><button className="mt-4 w-full bg-teal-600 hover:bg-teal-700 text-white rounded-xl py-3 text-sm font-bold">Save expense</button></form>}
+          {showExpenseForm && (
+            <form onSubmit={addExpense} className="bg-white rounded-2xl border border-teal-200 shadow-sm p-4 sm:p-5 mb-4">
+              <div className="flex items-center justify-between mb-4"><p className="font-bold text-gray-900">New expense</p><button type="button" onClick={() => setShowExpenseForm(false)} className="text-slate-400"><X size={18} /></button></div>
+              <div className="grid grid-cols-1 sm:grid-cols-[1fr_130px] gap-3"><input value={description} onChange={event => setDescription(event.target.value)} placeholder="What was it? e.g. lift tickets" autoFocus className="border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" /><input type="number" min="0.01" step="0.01" value={amount} onChange={event => setAmount(event.target.value)} placeholder="Amount" className="border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" /></div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3"><select value={category} onChange={event => setCategory(event.target.value)} className="border border-slate-200 rounded-xl px-3 py-2.5 text-sm bg-white">{CATEGORIES.map((item: string) => <option key={item} value={item}>{item.charAt(0).toUpperCase() + item.slice(1)}</option>)}</select><select value={paidById} onChange={event => setPaidById(event.target.value)} className="border border-slate-200 rounded-xl px-3 py-2.5 text-sm bg-white"><option value="">Paid by…</option>{trip.members.map((member: any) => <option key={member.id} value={member.id}>{member.name}</option>)}</select></div>
+              <div className="mt-4"><div className="flex items-center justify-between gap-3 mb-2"><p className="text-sm font-semibold text-slate-700">Split between</p><button type="button" onClick={() => setParticipants(trip.members.map((member: any) => member.id))} className="text-xs font-semibold text-teal-700">Select all</button></div><div className="flex flex-wrap gap-2">{trip.members.map((member: any, index: number) => { const selected = participants.includes(member.id); return <button key={member.id} type="button" onClick={() => toggleParticipant(member.id)} className={`inline-flex items-center gap-1.5 rounded-full border-2 pl-1 pr-3 py-1 text-sm font-semibold transition-colors ${selected ? 'border-teal-600 bg-teal-50 text-teal-800' : 'border-slate-200 bg-white text-slate-400'}`}><MemberAvatar name={member.name} index={index} size="xs" />{member.name}{selected && <Check size={13} />}</button>})}</div><p className="text-xs text-slate-400 mt-2">Selected people split this expense equally. {participants.length} selected.</p></div>
+              <button className="mt-4 w-full bg-teal-600 hover:bg-teal-700 text-white rounded-xl py-3 text-sm font-bold">Save expense</button>
+            </form>
+          )}
           {trip.expenses.length === 0 ? <div className="text-center py-14 bg-white rounded-2xl border border-slate-100"><div className="text-5xl mb-3">🏔️</div><p className="font-bold text-gray-800">No expenses yet</p><p className="text-sm text-slate-400 mt-1">Add the first trip cost when you have one.</p></div> : <div className="flex flex-col gap-2.5">{[...trip.expenses].sort((a: any, b: any) => b.date.localeCompare(a.date)).map((expense: any) => <ExpenseCard key={expense.id} expense={expense} members={trip.members} onDelete={deleteExpense} />)}</div>}
         </>}
 
