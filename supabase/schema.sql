@@ -29,4 +29,4 @@ create policy "SNOW 2026 can be updated"
   with check (slug = 'snow-2026');
 
 -- Enable Realtime so all open trip pages receive updates immediately.
-alter publication supabase_realtime add table if not exists public.shared_trips;
+alter publication supabase_realtime add table public.shared_trips;
